@@ -90,6 +90,31 @@ class SonoffSwitch(SmartDevice):
             # We raise the error or return False so the Parent class knows to try Cloud
             print(f"[{self.name}] LAN Unreachable ({e})")
             return False
+        
+    def get_state_lan(self):
+        """
+        Queries the device directly via HTTP for its status.
+        Target: /zeroconf/info
+        """
+        # Send an empty data body to the 'info' endpoint
+        resp = self._send_lan_request('info', {})
+        
+        # Check if we got a valid response
+        if not resp or resp.get('error') != 0:
+            return None
 
-    # Note: .on(), .off(), and .set_state() are removed because
-    # they are now inherited from SmartDevice!
+        # Extract the 'data' block
+        data = resp.get('data', {})
+
+        # --- LOGIC SPLIT: Multi-Channel vs Single ---
+        if self.channel is not None:
+            # Multi-Channel (e.g., switches=[{outlet:0, switch:'on'}, ...])
+            switches = data.get('switches', [])
+            for sw in switches:
+                if sw.get('outlet') == self.channel:
+                    return sw.get('switch') # Returns 'on' or 'off'
+        else:
+            # Single Channel (e.g., switch='on')
+            return data.get('switch')
+            
+        return None

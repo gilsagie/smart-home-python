@@ -53,3 +53,32 @@ class SmartDevice:
 
     def off(self):
         return self.set_state('off')
+    
+    def get_state(self):
+        """
+        Returns 'on', 'off', or None (if unreachable).
+        Hybrid Logic: Try LAN first -> Fallback to Cloud.
+        """
+        # 1. Try LAN
+        try:
+            state = self.get_state_lan()
+            if state is not None:
+                print(f"[{self.name}] State (LAN): {state}")
+                return state
+        except Exception as e:
+            print(f"[{self.name}] LAN Get-State Error: {e}")
+
+        # 2. Fallback to Cloud
+        if self.cloud_client:
+            print(f"[{self.name}] LAN unreachable. Fetching state from Cloud...")
+            return self.cloud_client.get_state(self.device_id, self.channel)
+        
+        print(f"[{self.name}] Error: Could not retrieve state (Device Offline).")
+        return None
+
+    def get_state_lan(self):
+        """
+        ABSTRACT METHOD: Child classes must implement this.
+        Should return 'on', 'off', or None.
+        """
+        raise NotImplementedError("Subclasses must implement get_state_lan()")

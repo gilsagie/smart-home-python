@@ -136,3 +136,63 @@ class SonoffCloudClient:
         else:
             print(f"Cloud Error: {resp}")
             return False
+        
+    def get_state(self, device_id, channel=None):
+        """
+        Fetches state handling 'thingList' and Multi-Gang (2-channel) devices.
+        """
+        endpoint = f'/device/thing?id={device_id}'
+        print(f"[Cloud] Fetching status for {device_id}...")
+        
+        resp = self._make_request('GET', endpoint)
+        
+        if resp.get('error') != 0:
+            print(f"[Cloud] API Error {resp.get('error')}: {resp.get('msg')}")
+            return None
+
+        # 1. Locate the Device Parameters
+        params = None
+        data = resp.get("data", {})
+
+        # STRATEGY A: User's 'thingList' structure (Priority)
+        if "thingList" in data:
+            for thing in data["thingList"]:
+                item_data = thing.get("itemData", {})
+                # Find the specific device in the list
+                if item_data.get("deviceid") == device_id:
+                    params = item_data.get("params", {})
+                    break
+        
+        # STRATEGY B: Direct structure (Fallback for other API versions)
+        elif "itemData" in data:
+            params = data["itemData"].get("params", {})
+        elif "params" in data:
+            params = data.get("params", {})
+
+        if not params:
+            print(f"[Cloud] Error: Could not find params for {device_id}")
+            return None
+
+        # 2. Extract State (Single vs Multi-Channel)
+        
+        # CASE 1: Specific Channel Requested (e.g. 2-Gang Switch)
+        if channel is not None:
+            # Check for the 'switches' list: [{"outlet": 0, "switch": "on"}, ...]
+            switches = params.get("switches", [])
+            
+            for sw in switches:
+                if sw.get("outlet") == channel:
+                    return sw.get("switch")
+            
+            # Formatting Note: Some devices use 'switch_0', 'switch_1' keys instead of a list
+            if f"switch_{channel}" in params:
+                 return params[f"switch_{channel}"]
+
+            print(f"[Cloud] Warning: Channel {channel} requested but not found in params.")
+
+        # CASE 2: Single Switch OR Fallback
+        # If we didn't find specific channel data, or no channel was requested
+        if "switch" in params:
+            return params["switch"]
+            
+        return None
