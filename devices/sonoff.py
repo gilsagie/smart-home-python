@@ -1,3 +1,4 @@
+# devices/sonoff.py
 import requests
 import json
 import time
@@ -7,8 +8,8 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 
-# 1. Import the new Parent Class
-from SmartDevice import SmartDevice
+# CHANGE: Relative import from the same package
+from .base import SmartDevice
 
 class SonoffSwitch(SmartDevice):
     def __init__(self, name, ip, device_id, device_key, mac=None, channel=None, cloud_client=None):

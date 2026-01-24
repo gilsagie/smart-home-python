@@ -1,3 +1,4 @@
+# cloud/sonoff_client.py
 import requests
 import json
 import hmac
@@ -7,6 +8,7 @@ import random
 import string
 import urllib3
 import os
+import sys  # <--- ADD THIS IMPORT
 
 # Disable SSL Warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -22,22 +24,24 @@ class SonoffCloudClient:
     def _get_id_data(self):
         if self.app_id:
             return
+        
         credentials = {}
-        cred_file = os.path.join(os.path.dirname(__file__), 'credentials.txt')
+        # Path fix to find config/credentials.txt
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        cred_file = os.path.join(project_root, 'config', 'credentials.txt')
         
         try:
             with open(cred_file, 'r') as f:
                 for line in f:
-                    # Skip empty lines or comments
                     if '=' in line:
                         key, value = line.strip().split('=', 1)
                         credentials[key.strip()] = value.strip()
         
         except FileNotFoundError:
-            print("Error: credentials.txt file not found!")
-            exit()
-        
-        # 2. Extract variables
+            print(f"Error: credentials.txt not found at {cred_file}")
+            sys.exit()  # <--- CHANGED from exit() to sys.exit()
+            
         self.app_id = credentials.get('APP_ID')
         self.app_secret = credentials.get('APP_SECRET')
         self.access_token = credentials.get('ACCESS_TOKEN')
@@ -58,33 +62,12 @@ class SonoffCloudClient:
         sign = self._get_signature(data_str)
         
         headers = {
-            'Authorization': f'Bearer {self.access_token}',  # Use Token Directly
-            'Content-Type': 'application/json',
-            'X-CK-Appid': self.app_id,
-            'X-CK-Nonce': ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        }
-
-        # V2 API requires the signature in a special header 'Sign'
-        headers['Authorization'] = f'Sign {sign}'
-        # But wait! For authenticated requests, the Authorization header is usually 'Bearer <token>'
-        # AND the signature goes into 'X-CK-Signature' or similar, OR we stack them.
-        
-        # CORRECTION For V2 API with Personal ID:
-        # 1. Authorization: Bearer <token>
-        # 2. X-CK-Appid: <appid>
-        # 3. Signature is often NOT required for simple control if Bearer is present, 
-        #    BUT if it is, it might be separate. 
-        # Let's try the standard V2 Headers for control:
-        
-        headers = {
             'Authorization': f'Bearer {self.access_token}',
             'Content-Type': 'application/json',
             'X-CK-Appid': self.app_id,
             'X-CK-Nonce': ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         }
         
-        # Some endpoints require re-signing the payload even with Bearer. 
-        # We will add it as a custom header just in case.
         headers['Sign'] = sign 
 
         try:
@@ -105,31 +88,25 @@ class SonoffCloudClient:
         """
         print(f"[Cloud] Sending {state} to {device_id} (Channel: {channel})...")
         
-        # --- LOGIC SPLIT ---
         if channel is not None:
-            # Multi-Channel Payload (for 2-way switches)
-            # The API expects a list of switches to update
             params = {
                 "switches": [
                     {"outlet": int(channel), "switch": state}
                 ]
             }
         else:
-            # Single-Channel Payload (Standard)
             params = {
                 "switch": state
             }
-        # -------------------
         
         payload = {
-            'type': 1, # 1 = Device
+            'type': 1, 
             'id': device_id,
             'params': params
         }
         
         resp = self._make_request('POST', '/device/thing/status', payload)
         
-        # Check for success (error: 0)
         if resp.get('error') == 0:
             print("SUCCESS: Command delivered.")
             return True
@@ -150,20 +127,15 @@ class SonoffCloudClient:
             print(f"[Cloud] API Error {resp.get('error')}: {resp.get('msg')}")
             return None
 
-        # 1. Locate the Device Parameters
         params = None
         data = resp.get("data", {})
 
-        # STRATEGY A: User's 'thingList' structure (Priority)
         if "thingList" in data:
             for thing in data["thingList"]:
                 item_data = thing.get("itemData", {})
-                # Find the specific device in the list
                 if item_data.get("deviceid") == device_id:
                     params = item_data.get("params", {})
                     break
-        
-        # STRATEGY B: Direct structure (Fallback for other API versions)
         elif "itemData" in data:
             params = data["itemData"].get("params", {})
         elif "params" in data:
@@ -173,25 +145,17 @@ class SonoffCloudClient:
             print(f"[Cloud] Error: Could not find params for {device_id}")
             return None
 
-        # 2. Extract State (Single vs Multi-Channel)
-        
-        # CASE 1: Specific Channel Requested (e.g. 2-Gang Switch)
         if channel is not None:
-            # Check for the 'switches' list: [{"outlet": 0, "switch": "on"}, ...]
             switches = params.get("switches", [])
-            
             for sw in switches:
                 if sw.get("outlet") == channel:
                     return sw.get("switch")
             
-            # Formatting Note: Some devices use 'switch_0', 'switch_1' keys instead of a list
             if f"switch_{channel}" in params:
                  return params[f"switch_{channel}"]
 
             print(f"[Cloud] Warning: Channel {channel} requested but not found in params.")
 
-        # CASE 2: Single Switch OR Fallback
-        # If we didn't find specific channel data, or no channel was requested
         if "switch" in params:
             return params["switch"]
             
