@@ -7,19 +7,21 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 
-class SonoffSwitch:
-    # 1. Add cloud_client as an optional argument
-    def __init__(self, name, ip, device_id, device_key, mac=None, cloud_client=None):
-        self.name = name
-        self.ip = ip
-        self.device_id = device_id
+# 1. Import the new Parent Class
+from SmartDevice import SmartDevice
+
+class SonoffSwitch(SmartDevice):
+    def __init__(self, name, ip, device_id, device_key, mac=None, channel=None, cloud_client=None):
+        # 2. Initialize the Parent
+        # We pass the new 'channel' argument up to SmartDevice
+        super().__init__(name, ip, device_id, channel, cloud_client)
+        
         self.device_key = device_key
         self.mac = mac
-        self.cloud_client = cloud_client  # Store the shared cloud connection
         self.port = 8081
 
     def _encrypt_payload(self, data_dict):
-        # ... (Same encryption code as before) ...
+        """Helper: Encrypts data for Sonoff DIY mode"""
         data_str = json.dumps(data_dict, separators=(',', ':'))
         key_bytes = hashlib.md5(self.device_key.encode('utf-8')).digest()
         iv = get_random_bytes(16)
@@ -30,7 +32,7 @@ class SonoffSwitch:
         return encoded_data, encoded_iv
 
     def _send_lan_request(self, endpoint, data_body):
-        """Helper to send the actual POST request via LAN"""
+        """Helper: Sends the HTTP POST to the device"""
         url = f"http://{self.ip}:{self.port}/zeroconf/{endpoint}"
         
         payload = {
@@ -47,15 +49,35 @@ class SonoffSwitch:
         else:
             payload["data"] = data_body
 
-        # Short timeout for LAN (so we switch to cloud quickly if it fails)
+        # Short timeout so we fail fast and try Cloud if needed
         r = requests.post(url, json=payload, timeout=2) 
         return r.json()
 
-    def _set_state_lan(self, state):
-        """Internal function to try LAN control"""
+    def set_state_lan(self, state):
+        """
+        The specific LAN protocol for Sonoff.
+        Handles both Single-channel and Multi-channel devices.
+        """
         try:
-            print(f"[{self.name}] Trying LAN control...")
-            resp = self._send_lan_request("switch", {"switch": state})
+            print(f"[{self.name}] Trying LAN control (Sonoff)...")
+            
+            # --- LOGIC SPLIT FOR 2-WAY SWITCHES ---
+            if self.channel is not None:
+                # It's a multi-channel device (e.g., Dual R3)
+                # Endpoint is 'switches', payload needs 'outlet' index
+                endpoint = "switches"
+                payload = {
+                    "switches": [
+                        {"outlet": int(self.channel), "switch": state}
+                    ]
+                }
+            else:
+                # It's a standard single relay (e.g., Basic / Mini)
+                endpoint = "switch"
+                payload = {"switch": state}
+            # --------------------------------------
+
+            resp = self._send_lan_request(endpoint, payload)
             
             if resp.get('error') == 0:
                 print(f"[{self.name}] LAN Success.")
@@ -63,33 +85,11 @@ class SonoffSwitch:
             else:
                 print(f"[{self.name}] LAN Error: {resp}")
                 return False
+                
         except Exception as e:
+            # We raise the error or return False so the Parent class knows to try Cloud
             print(f"[{self.name}] LAN Unreachable ({e})")
             return False
 
-    # --- MAIN CONTROL FUNCTION ---
-    def set_state(self, state):
-        """
-        The Smart Hybrid Logic:
-        1. Try LAN (Fastest).
-        2. If LAN fails, use the shared Cloud Client (Reliable).
-        """
-        
-        # 1. Try LAN
-        if self._set_state_lan(state):
-            return True
-
-        # 2. Fallback to Cloud
-        if self.cloud_client:
-            print(f"[{self.name}] Switching to Cloud...")
-            return self.cloud_client.set_state(self.device_id, state)
-        
-        print(f"[{self.name}] Failed: LAN unreachable and no Cloud client connected.")
-        return False
-
-    # --- User Friendly Functions ---
-    def on(self):
-        return self.set_state('on')
-
-    def off(self):
-        return self.set_state('off')
+    # Note: .on(), .off(), and .set_state() are removed because
+    # they are now inherited from SmartDevice!

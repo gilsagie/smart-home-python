@@ -97,17 +97,34 @@ class SonoffCloudClient:
             print(f"Cloud Connection Error: {e}")
             return {'error': -1}
     
-    def set_state(self, device_id, state):
+    def set_state(self, device_id, state, channel=None):
         """
         device_id: The ID from your CSV
         state: 'on' or 'off'
+        channel: The specific channel (0, 1, etc.) for multi-switches. None for single.
         """
-        print(f"[Cloud] Sending {state} to {device_id}...")
+        print(f"[Cloud] Sending {state} to {device_id} (Channel: {channel})...")
+        
+        # --- LOGIC SPLIT ---
+        if channel is not None:
+            # Multi-Channel Payload (for 2-way switches)
+            # The API expects a list of switches to update
+            params = {
+                "switches": [
+                    {"outlet": int(channel), "switch": state}
+                ]
+            }
+        else:
+            # Single-Channel Payload (Standard)
+            params = {
+                "switch": state
+            }
+        # -------------------
         
         payload = {
             'type': 1, # 1 = Device
             'id': device_id,
-            'params': {'switch': state}
+            'params': params
         }
         
         resp = self._make_request('POST', '/device/thing/status', payload)
