@@ -8,10 +8,14 @@ import random
 import string
 import urllib3
 import os
-import sys  # <--- ADD THIS IMPORT
+import sys
+import logging  # <--- NEW IMPORT
 
 # Disable SSL Warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Create logger for this module
+logger = logging.getLogger("SonoffCloud") # <--- NEW LOGGER
 
 class SonoffCloudClient:
     def __init__(self, app_id=None, app_secret=None, access_token=None, region='as'):
@@ -26,7 +30,6 @@ class SonoffCloudClient:
             return
         
         credentials = {}
-        # Path fix to find config/credentials.txt
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_dir)
         cred_file = os.path.join(project_root, 'config', 'credentials.txt')
@@ -39,8 +42,8 @@ class SonoffCloudClient:
                         credentials[key.strip()] = value.strip()
         
         except FileNotFoundError:
-            print(f"Error: credentials.txt not found at {cred_file}")
-            sys.exit()  # <--- CHANGED from exit() to sys.exit()
+            logger.error(f"credentials.txt not found at {cred_file}") # <--- CHANGED
+            sys.exit()
             
         self.app_id = credentials.get('APP_ID')
         self.app_secret = credentials.get('APP_SECRET')
@@ -48,7 +51,6 @@ class SonoffCloudClient:
         return
 
     def _get_signature(self, data_str):
-        """Calculates the digital signature required by eWeLink"""
         digest = hmac.new(
             self.app_secret.encode('utf-8'), 
             data_str.encode('utf-8'), 
@@ -72,21 +74,16 @@ class SonoffCloudClient:
 
         try:
             if method == 'POST':
-                r = requests.post(url, data=data_str, headers=headers)#, verify=False)
+                r = requests.post(url, data=data_str, headers=headers)
             else:
-                r = requests.get(url, headers=headers)#, verify=False)
+                r = requests.get(url, headers=headers)
             return r.json()
         except Exception as e:
-            print(f"Cloud Connection Error: {e}")
+            logger.error(f"Cloud Connection Error: {e}") # <--- CHANGED
             return {'error': -1}
     
     def set_state(self, device_id, state, channel=None):
-        """
-        device_id: The ID from your CSV
-        state: 'on' or 'off'
-        channel: The specific channel (0, 1, etc.) for multi-switches. None for single.
-        """
-        print(f"[Cloud] Sending {state} to {device_id} (Channel: {channel})...")
+        logger.info(f"Sending {state} to {device_id} (Channel: {channel})...") # <--- CHANGED
         
         if channel is not None:
             params = {
@@ -108,23 +105,20 @@ class SonoffCloudClient:
         resp = self._make_request('POST', '/device/thing/status', payload)
         
         if resp.get('error') == 0:
-            print("SUCCESS: Command delivered.")
+            logger.info("Command delivered successfully.") # <--- CHANGED
             return True
         else:
-            print(f"Cloud Error: {resp}")
+            logger.error(f"Cloud API Error: {resp}") # <--- CHANGED
             return False
         
     def get_state(self, device_id, channel=None):
-        """
-        Fetches state handling 'thingList' and Multi-Gang (2-channel) devices.
-        """
         endpoint = f'/device/thing?id={device_id}'
-        print(f"[Cloud] Fetching status for {device_id}...")
+        logger.info(f"Fetching status for {device_id}...") # <--- CHANGED
         
         resp = self._make_request('GET', endpoint)
         
         if resp.get('error') != 0:
-            print(f"[Cloud] API Error {resp.get('error')}: {resp.get('msg')}")
+            logger.error(f"API Error {resp.get('error')}: {resp.get('msg')}") # <--- CHANGED
             return None
 
         params = None
@@ -142,7 +136,7 @@ class SonoffCloudClient:
             params = data.get("params", {})
 
         if not params:
-            print(f"[Cloud] Error: Could not find params for {device_id}")
+            logger.error(f"Could not find params for {device_id}") # <--- CHANGED
             return None
 
         if channel is not None:
@@ -154,7 +148,7 @@ class SonoffCloudClient:
             if f"switch_{channel}" in params:
                  return params[f"switch_{channel}"]
 
-            print(f"[Cloud] Warning: Channel {channel} requested but not found in params.")
+            logger.warning(f"Channel {channel} requested but not found in params.") # <--- CHANGED
 
         if "switch" in params:
             return params["switch"]

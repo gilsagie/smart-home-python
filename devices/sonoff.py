@@ -4,25 +4,24 @@ import json
 import time
 import base64
 import hashlib
+import logging # <--- NEW IMPORT
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 
-# CHANGE: Relative import from the same package
 from .base import SmartDevice
+
+logger = logging.getLogger("SonoffLAN") # <--- NEW LOGGER
 
 class SonoffSwitch(SmartDevice):
     def __init__(self, name, ip, device_id, device_key, mac=None, channel=None, cloud_client=None):
-        # 2. Initialize the Parent
-        # We pass the new 'channel' argument up to SmartDevice
         super().__init__(name, ip, device_id, channel, cloud_client)
-        
         self.device_key = device_key
         self.mac = mac
         self.port = 8081
 
     def _encrypt_payload(self, data_dict):
-        """Helper: Encrypts data for Sonoff DIY mode"""
+        # ... (Same encryption logic as before) ...
         data_str = json.dumps(data_dict, separators=(',', ':'))
         key_bytes = hashlib.md5(self.device_key.encode('utf-8')).digest()
         iv = get_random_bytes(16)
@@ -33,7 +32,6 @@ class SonoffSwitch(SmartDevice):
         return encoded_data, encoded_iv
 
     def _send_lan_request(self, endpoint, data_body):
-        """Helper: Sends the HTTP POST to the device"""
         url = f"http://{self.ip}:{self.port}/zeroconf/{endpoint}"
         
         payload = {
@@ -50,22 +48,15 @@ class SonoffSwitch(SmartDevice):
         else:
             payload["data"] = data_body
 
-        # Short timeout so we fail fast and try Cloud if needed
         r = requests.post(url, json=payload, timeout=2) 
         return r.json()
 
     def set_state_lan(self, state):
-        """
-        The specific LAN protocol for Sonoff.
-        Handles both Single-channel and Multi-channel devices.
-        """
         try:
-            print(f"[{self.name}] Trying LAN control (Sonoff)...")
+            # logger.debug is useful here to avoid cluttering logs unless debugging
+            logger.debug(f"[{self.name}] Trying LAN control (Sonoff)...") # <--- CHANGED
             
-            # --- LOGIC SPLIT FOR 2-WAY SWITCHES ---
             if self.channel is not None:
-                # It's a multi-channel device (e.g., Dual R3)
-                # Endpoint is 'switches', payload needs 'outlet' index
                 endpoint = "switches"
                 payload = {
                     "switches": [
@@ -73,49 +64,36 @@ class SonoffSwitch(SmartDevice):
                     ]
                 }
             else:
-                # It's a standard single relay (e.g., Basic / Mini)
                 endpoint = "switch"
                 payload = {"switch": state}
-            # --------------------------------------
 
             resp = self._send_lan_request(endpoint, payload)
             
             if resp.get('error') == 0:
-                print(f"[{self.name}] LAN Success.")
+                logger.info(f"[{self.name}] LAN Success.") # <--- CHANGED
                 return True
             else:
-                print(f"[{self.name}] LAN Error: {resp}")
+                logger.error(f"[{self.name}] LAN Error: {resp}") # <--- CHANGED
                 return False
                 
         except Exception as e:
-            # We raise the error or return False so the Parent class knows to try Cloud
-            print(f"[{self.name}] LAN Unreachable ({e})")
+            logger.warning(f"[{self.name}] LAN Unreachable ({e})") # <--- CHANGED
             return False
         
     def get_state_lan(self):
-        """
-        Queries the device directly via HTTP for its status.
-        Target: /zeroconf/info
-        """
-        # Send an empty data body to the 'info' endpoint
         resp = self._send_lan_request('info', {})
         
-        # Check if we got a valid response
         if not resp or resp.get('error') != 0:
             return None
 
-        # Extract the 'data' block
         data = resp.get('data', {})
 
-        # --- LOGIC SPLIT: Multi-Channel vs Single ---
         if self.channel is not None:
-            # Multi-Channel (e.g., switches=[{outlet:0, switch:'on'}, ...])
             switches = data.get('switches', [])
             for sw in switches:
                 if sw.get('outlet') == self.channel:
-                    return sw.get('switch') # Returns 'on' or 'off'
+                    return sw.get('switch')
         else:
-            # Single Channel (e.g., switch='on')
             return data.get('switch')
             
         return None

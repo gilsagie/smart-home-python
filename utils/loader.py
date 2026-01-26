@@ -4,7 +4,10 @@ import os
 import concurrent.futures
 
 from devices.sonoff import SonoffSwitch
+# NEW: Import the Tuya class we created
+from devices.tuya import TuyaSwitch  
 from cloud.sonoff_client import SonoffCloudClient
+# from cloud.tuya_client import TuyaCloudClient # Optional: Uncomment if you implemented Cloud
 
 def load_switches():
     """
@@ -17,7 +20,12 @@ def load_switches():
     yaml_file = os.path.join(project_root, 'config', 'switches.yaml')
     
     SWITCH_DICT = {}
-    cloud = SonoffCloudClient() # Initialize Cloud once
+    
+    # Initialize Cloud Clients
+    # We initialize them once here and pass them down to devices
+    sonoff_cloud = SonoffCloudClient() 
+    # tuya_cloud = TuyaCloudClient() # Optional
+    tuya_cloud = None # Placeholder if you haven't set up cloud keys yet
     
     print(f"Loading switches from {yaml_file}...")
     
@@ -30,23 +38,39 @@ def load_switches():
             for item in device_list:
                 name = item.get('name')
                 ip = item.get('ip')
-                if not name or not ip: continue
+                
+                # Basic validation
+                if not name or not ip: 
+                    continue
 
+                # Common fields
                 dev_type = item.get('type', 'sonoff').lower()
                 channel = item.get('channel') 
                 dev_id = item.get('device_id')
-                dev_key = item.get('device_key')
+                dev_key = item.get('device_key') # Used as 'deviceKey' (Sonoff) or 'LocalKey' (Tuya)
                 mac = item.get('mac')
                 
                 new_switch = None
 
+                # --- SONOFF LOGIC ---
                 if dev_type == 'sonoff':
                     new_switch = SonoffSwitch(
                         name=name, ip=ip, device_id=dev_id, 
                         device_key=dev_key, mac=mac, 
-                        channel=channel, cloud_client=cloud
+                        channel=channel, cloud_client=sonoff_cloud
+                    )
+
+                # --- TUYA LOGIC ---
+                elif dev_type == 'tuya':
+                    # Tuya devices use 'device_key' from the CSV as their 'Local Key'
+                    new_switch = TuyaSwitch(
+                        name=name, ip=ip, device_id=dev_id,
+                        local_key=dev_key, 
+                        channel=channel, 
+                        cloud_client=tuya_cloud
                     )
                 
+                # Add to dictionary if successfully created
                 if new_switch:
                     SWITCH_DICT[name] = new_switch
 
