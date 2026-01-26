@@ -49,6 +49,7 @@ def load_switches():
                 dev_id = item.get('device_id')
                 dev_key = item.get('device_key') # Used as 'deviceKey' (Sonoff) or 'LocalKey' (Tuya)
                 mac = item.get('mac')
+                stateless = item.get('stateless', False) # <--- NEW READ
                 
                 new_switch = None
 
@@ -57,7 +58,8 @@ def load_switches():
                     new_switch = SonoffSwitch(
                         name=name, ip=ip, device_id=dev_id, 
                         device_key=dev_key, mac=mac, 
-                        channel=channel, cloud_client=sonoff_cloud
+                        channel=channel, cloud_client=sonoff_cloud,
+                        stateless=stateless # <--- PASS IT
                     )
 
                 # --- TUYA LOGIC ---
@@ -67,7 +69,8 @@ def load_switches():
                         name=name, ip=ip, device_id=dev_id,
                         local_key=dev_key, 
                         channel=channel, 
-                        cloud_client=tuya_cloud
+                        cloud_client=tuya_cloud,
+                        stateless=stateless # <--- PASS IT
                     )
                 
                 # Add to dictionary if successfully created

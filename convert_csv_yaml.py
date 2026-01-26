@@ -37,7 +37,8 @@ def convert():
                     'type': row.get('type', 'sonoff').lower(),
                     'device_id': row.get('device_id', '').strip(),
                     'device_key': row.get('device_key', '').strip(),
-                    'mac': row.get('mac', '').strip()
+                    'mac': row.get('mac', '').strip(),
+                    'stateless': row.get('stateless', '').strip(),
                 }
                 
                 # Only add channel if it exists (keeps YAML clean)

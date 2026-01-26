@@ -11,8 +11,8 @@ import time
 from .base import SmartDevice
 
 class TuyaSwitch(SmartDevice):
-    def __init__(self, name, ip, device_id, local_key, version=3.3, channel=None, cloud_client=None):
-        super().__init__(name, ip, device_id, channel, cloud_client)
+    def __init__(self, name, ip, device_id, local_key, version=3.3, channel=None, cloud_client=None, stateless=False):
+        super().__init__(name, ip, device_id, channel, cloud_client, stateless=stateless)
         
         self.local_key = local_key
         self.version = version

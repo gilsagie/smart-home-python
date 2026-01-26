@@ -5,5 +5,7 @@ __pycache__/
 *.csv
 *.yaml
 *.txt
+*.json
 .spyproject/
+config/
 credentials.txt

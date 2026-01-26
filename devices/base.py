@@ -8,16 +8,19 @@ class SmartDevice:
     """
     Base class for all Smart Home devices (Sonoff, Shelly, Tuya, etc.).
     """
-    def __init__(self, name, ip, device_id, channel=None, cloud_client=None):
+    def __init__(self, name, ip, device_id, channel=None, cloud_client=None, stateless=False):
         self.name = name
         self.ip = ip
         self.device_id = device_id
         self.channel = channel
         self.cloud_client = cloud_client
+        self.stateless = stateless  # <--- NEW FLAG
         self._state = None
     
     @property
     def state(self):
+        if self.stateless:
+            return "N/A"
         if self._state != 'on' and self._state != 'off':
              logger.info(f"[{self.name}] State unknown. Fetching...") # <--- CHANGED
              self.get_state()
@@ -51,6 +54,8 @@ class SmartDevice:
         return self.set_state('off')
     
     def get_state(self):
+        if self.stateless:
+            return "N/A"
         # 1. Try LAN
         try:
             state = self.get_state_lan()

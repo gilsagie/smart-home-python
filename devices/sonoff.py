@@ -14,8 +14,8 @@ from .base import SmartDevice
 logger = logging.getLogger("SonoffLAN") # <--- NEW LOGGER
 
 class SonoffSwitch(SmartDevice):
-    def __init__(self, name, ip, device_id, device_key, mac=None, channel=None, cloud_client=None):
-        super().__init__(name, ip, device_id, channel, cloud_client)
+    def __init__(self, name, ip, device_id, device_key, mac=None, channel=None, cloud_client=None, stateless=False):
+        super().__init__(name, ip, device_id, channel, cloud_client, stateless=stateless)
         self.device_key = device_key
         self.mac = mac
         self.port = 8081
