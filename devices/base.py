@@ -15,6 +15,15 @@ class SmartDevice:
         self.device_id = device_id
         self.channel = channel  # New: Stores 0 or 1 for multi-switch devices
         self.cloud_client = cloud_client
+        self._state = None
+    
+    @property
+    def state(self):
+        if self._state != 'on' and self._state != 'off':
+             print(f"[{self.name}] State unknown. Fetching...")
+             self.get_state() # This updates self._state internally
+        
+        return self._state
 
     def set_state_lan(self, state):
         """
@@ -33,6 +42,7 @@ class SmartDevice:
         try:
             # We trust the child class to handle the specific LAN logic
             if self.set_state_lan(state):
+                self._state = state
                 return True
         except Exception as e:
             # If LAN crashes (e.g. connection timeout), we just log it and move to Cloud
@@ -42,6 +52,7 @@ class SmartDevice:
         if self.cloud_client:
             print(f"[{self.name}] LAN failed/unreachable. Switching to Cloud...")
             # We now pass 'channel' to the cloud!
+            self._state = state
             return self.cloud_client.set_state(self.device_id, state, self.channel)
         
         print(f"[{self.name}] Failed: LAN unreachable and no Cloud client connected.")
@@ -63,6 +74,7 @@ class SmartDevice:
         try:
             state = self.get_state_lan()
             if state is not None:
+                self._state = state
                 print(f"[{self.name}] State (LAN): {state}")
                 return state
         except Exception as e:
@@ -71,7 +83,10 @@ class SmartDevice:
         # 2. Fallback to Cloud
         if self.cloud_client:
             print(f"[{self.name}] LAN unreachable. Fetching state from Cloud...")
-            return self.cloud_client.get_state(self.device_id, self.channel)
+            state = self.cloud_client.get_state(self.device_id, self.channel)
+            if state is not None:
+                self._state = state # <--- Update Cache
+            return state
         
         print(f"[{self.name}] Error: Could not retrieve state (Device Offline).")
         return None

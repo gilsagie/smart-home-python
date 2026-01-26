@@ -72,9 +72,9 @@ class SonoffCloudClient:
 
         try:
             if method == 'POST':
-                r = requests.post(url, data=data_str, headers=headers, verify=False)
+                r = requests.post(url, data=data_str, headers=headers)#, verify=False)
             else:
-                r = requests.get(url, headers=headers, verify=False)
+                r = requests.get(url, headers=headers)#, verify=False)
             return r.json()
         except Exception as e:
             print(f"Cloud Connection Error: {e}")

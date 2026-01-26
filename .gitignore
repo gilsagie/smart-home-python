@@ -3,6 +3,7 @@ __pycache__/
 .env
 *.exe
 *.csv
+*.yaml
 *.txt
 .spyproject/
 credentials.txt

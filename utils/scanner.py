@@ -82,7 +82,7 @@ if __name__ == "__main__":
         #print("---------------------------------------------")
         finds = ['44-5d-5e-41-35-0c']
         for ip, mac in final_devices:
-            #print(f"{ip:<20} {mac}")
+            print(f"{ip:<20} {mac}")
             if mac in finds:
                 print("FOUND!!! " + ip)
             
