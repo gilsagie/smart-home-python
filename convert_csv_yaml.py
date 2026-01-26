@@ -30,6 +30,10 @@ def convert():
                 raw_channel = row.get('channel', '').strip()
                 channel = int(raw_channel) if raw_channel.isdigit() else None
 
+                # This ensures "True"/"true" becomes Python True, everything else False
+                raw_stateless = row.get('stateless', '').strip().lower()
+                is_stateless = (raw_stateless == 'true')
+
                 # Build the dictionary object
                 device_data = {
                     'name': name,
@@ -38,7 +42,7 @@ def convert():
                     'device_id': row.get('device_id', '').strip(),
                     'device_key': row.get('device_key', '').strip(),
                     'mac': row.get('mac', '').strip(),
-                    'stateless': row.get('stateless', '').strip(),
+                    'stateless': is_stateless  # <--- Add this field
                 }
                 
                 # Only add channel if it exists (keeps YAML clean)

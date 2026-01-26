@@ -7,7 +7,7 @@ from devices.sonoff import SonoffSwitch
 # NEW: Import the Tuya class we created
 from devices.tuya import TuyaSwitch  
 from cloud.sonoff_client import SonoffCloudClient
-# from cloud.tuya_client import TuyaCloudClient # Optional: Uncomment if you implemented Cloud
+from cloud.tuya_client import TuyaCloudClient # Optional: Uncomment if you implemented Cloud
 
 def load_switches():
     """
@@ -24,8 +24,8 @@ def load_switches():
     # Initialize Cloud Clients
     # We initialize them once here and pass them down to devices
     sonoff_cloud = SonoffCloudClient() 
-    # tuya_cloud = TuyaCloudClient() # Optional
-    tuya_cloud = None # Placeholder if you haven't set up cloud keys yet
+    tuya_cloud = TuyaCloudClient() # Optional
+    
     
     print(f"Loading switches from {yaml_file}...")
     
@@ -81,8 +81,8 @@ def load_switches():
         print(f"Initializing state for {len(SWITCH_DICT)} devices (Threading)...")
         
         def _fetch_state(device):
-            # This calls get_state(), which now populates device._state automatically
-            return device.get_state()
+            result = device.get_state()
+            return result
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             # Run get_state() for every device at the same time

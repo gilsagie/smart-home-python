@@ -9,6 +9,9 @@ Created on Mon Jan 26 18:58:58 2026
 import tinytuya
 import time
 from .base import SmartDevice
+import logging  # <--- NEW IMPORT
+
+logger = logging.getLogger("TuyaLAN")  # <--- NEW LOGGER
 
 class TuyaSwitch(SmartDevice):
     def __init__(self, name, ip, device_id, local_key, version=3.3, channel=None, cloud_client=None, stateless=False):
@@ -41,7 +44,7 @@ class TuyaSwitch(SmartDevice):
         Implementation of Abstract Method.
         Uses TinyTuya to send command locally.
         """
-        print(f"[{self.name}] Trying LAN control (Tuya)...")
+        logger.debug(f"[{self.name}] Trying LAN control (Tuya)...")
         
         try:
             target_bool = (state == 'on')
@@ -58,14 +61,14 @@ class TuyaSwitch(SmartDevice):
             
             # TinyTuya returns None on failure or a dict on success
             if data and 'Error' not in data:
-                print(f"[{self.name}] LAN Success.")
+                logger.info(f"[{self.name}] LAN Success.")  # <--- NOW HAS TIMESTAMP
                 return True
             else:
-                print(f"[{self.name}] LAN Error: {data}")
+                logger.error(f"[{self.name}] LAN Error: {data}")
                 return False
                 
         except Exception as e:
-            print(f"[{self.name}] LAN Unreachable ({e})")
+            logger.warning(f"[{self.name}] LAN Unreachable ({e})")
             return False
 
     def get_state_lan(self):
@@ -89,5 +92,5 @@ class TuyaSwitch(SmartDevice):
             return None
             
         except Exception as e:
-            print(f"[{self.name}] LAN Get-State Error: {e}")
+            logger.debug(f"[{self.name}] LAN Get-State Error: {e}")
             return None

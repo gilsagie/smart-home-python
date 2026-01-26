@@ -1,6 +1,12 @@
 from utils.loader import load_switches
+import logging  # <--- NEW IMPORT
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S'
+    )
     # This loads devices AND fetches their initial states
     SWITCH_DICT = load_switches()
     
@@ -11,7 +17,7 @@ if __name__ == "__main__":
         print(f"Initial Cached State: {device.state}")
         
         # 2. Toggle based on cache
-        device.on()
+        device.off()
         if device.state == 'on':
             print("Light is ON. Turning OFF...")
             #device.off()
