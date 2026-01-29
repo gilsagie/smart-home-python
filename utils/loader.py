@@ -3,11 +3,13 @@ import yaml
 import os
 import concurrent.futures
 
+from devices.sensibo import SensiboAC
 from devices.sonoff import SonoffSwitch
 # NEW: Import the Tuya class we created
 from devices.tuya import TuyaSwitch  
 from cloud.sonoff_client import SonoffCloudClient
-from cloud.tuya_client import TuyaCloudClient # Optional: Uncomment if you implemented Cloud
+from cloud.tuya_client import TuyaCloudClient 
+from cloud.sensibo_client import SensiboCloudClient
 
 def load_switches():
     """
@@ -25,7 +27,7 @@ def load_switches():
     # We initialize them once here and pass them down to devices
     sonoff_cloud = SonoffCloudClient() 
     tuya_cloud = TuyaCloudClient() # Optional
-    
+    sensibo_cloud = SensiboCloudClient()
     
     print(f"Loading switches from {yaml_file}...")
     
@@ -71,6 +73,14 @@ def load_switches():
                         channel=channel, 
                         cloud_client=tuya_cloud,
                         stateless=stateless # <--- PASS IT
+                    )
+                # --- SENSIBO LOGIC ---
+                elif dev_type == 'sensibo':
+                    new_switch = SensiboAC(
+                        name=name, 
+                        device_id=dev_id, # This is the POD ID
+                        cloud_client=sensibo_cloud,
+                        stateless=stateless
                     )
                 
                 # Add to dictionary if successfully created

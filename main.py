@@ -1,5 +1,5 @@
 from utils.loader import load_switches
-import logging  # <--- NEW IMPORT
+import logging
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -10,25 +10,19 @@ if __name__ == "__main__":
     # This loads devices AND fetches their initial states
     SWITCH_DICT = load_switches()
     
-    if "Lamp" in SWITCH_DICT:
-        device = SWITCH_DICT["Lamp"]
+    if "AC" in SWITCH_DICT:
+        ac = SWITCH_DICT["AC"]
+        current_temp = ac.get_room_temperature()
+        humidity = ac.get_humidity()
         
-        # 1. Check the Cached State (Instant)
-        print(f"Initial Cached State: {device.state}")
+        print(f"Current Room Status: {current_temp}°C | {humidity}% Humidity")
+        # 1. Basic On/Off
+        ac.off()
         
-        # 2. Toggle based on cache
-        device.off()
-        if device.state == 'on':
-            print("Light is ON. Turning OFF...")
-            #device.off()
-        elif device.state == 'off':
-            print("Light is OFF. Turning ON...")
-            #device.on()
-        else:
-            print("ERROR")
-            
-        # 3. Check Cache again (Updated automatically by .on()/.off())
-        print(f"New Cached State: {device.state}")
-        
-    else:
-        print("Device 'Entrance light' not found.")
+        # 2. Specific AC Commands
+        # Note: These methods only exist on the SensiboAC object
+        if hasattr(ac, 'set_temperature'):
+            print("Setting AC to 23°C Heat...")
+            ac.set_mode('heat')
+            ac.set_temperature(23)
+            ac.set_fan('high')
