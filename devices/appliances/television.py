@@ -1,5 +1,5 @@
 # devices/television.py
-from .base import SmartDevice
+from ..base import SmartDevice
 import logging
 
 logger = logging.getLogger("Television")

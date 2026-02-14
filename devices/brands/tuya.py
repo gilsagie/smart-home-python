@@ -8,7 +8,7 @@ Created on Mon Jan 26 18:58:58 2026
 # devices/tuya.py
 import tinytuya
 import time
-from .base import SmartDevice
+from ..base import SmartDevice
 import logging  # <--- NEW IMPORT
 
 logger = logging.getLogger("TuyaLAN")  # <--- NEW LOGGER

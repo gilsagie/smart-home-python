@@ -1,6 +1,6 @@
 # devices/air_conditioner.py
 import logging
-from .base import SmartDevice
+from ..base import SmartDevice
 
 logger = logging.getLogger("UniversalAC")
 

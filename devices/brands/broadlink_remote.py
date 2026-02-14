@@ -1,6 +1,6 @@
 # devices/broadlink_remote.py
 import broadlink
-from .base import SmartDevice
+from ..base import SmartDevice
 
 class BroadlinkRemote(SmartDevice):
     def __init__(self, name, ip, device_id, mac, cloud_client=None, stateless=True):

@@ -6,7 +6,7 @@ Created on Thu Jan 29 19:19:13 2026
 """
 
 # devices/sensibo.py
-from .base import SmartDevice
+from ..base import SmartDevice
 import logging
 
 logger = logging.getLogger("SensiboDevice")

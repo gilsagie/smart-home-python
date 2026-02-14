@@ -1,4 +1,4 @@
-from utils.loader import load_switches
+from utils.loader import load_devices
 import logging
 
 if __name__ == "__main__":
@@ -11,9 +11,9 @@ if __name__ == "__main__":
     
     # main.py
 
-    switches = load_switches()
+    devices = load_devices()
     
     # These calls work automatically, routing to different IR blasters
     # based on the definitions in commands.yaml
-    switches["Bed room AC"].on()
-    switches["Bed room AC"].on() 
+    devices["Bed room AC"].on()
+    devices["Bed room AC"].on() 

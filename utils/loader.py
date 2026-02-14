@@ -2,43 +2,54 @@
 import yaml
 import os
 import concurrent.futures
+import logging
 
-# Existing Device Imports
-from devices.sonoff import SonoffSwitch
-from devices.tuya import TuyaSwitch
-# NEW Device Imports
-from devices.broadlink_remote import BroadlinkRemote
-from devices.television import Television
-from devices.air_conditioner import AirConditioner
-from devices.sensibo import SensiboAC
+# Device Imports
+from devices.brands.sonoff import SonoffSwitch
+from devices.brands.tuya import TuyaSwitch
+from devices.brands.broadlink_remote import BroadlinkRemote
+from devices.brands.sensibo import SensiboAC
+from devices.appliances.television import Television
+from devices.appliances.air_conditioner import AirConditioner
+
 
 # Cloud Clients
 from cloud.sonoff_client import SonoffCloudClient
 from cloud.tuya_client import TuyaCloudClient 
 from cloud.sensibo_client import SensiboCloudClient
 
-def load_switches():
+logger = logging.getLogger("DeviceLoader")
+
+def load_devices():
     """
     1. Loads devices from config/switches.yaml
-    2. Loads commands from config/commands.yaml (for TVs)
-    3. Initializes Hardware (Sonoff, Tuya, Broadlink)
-    4. Initializes Virtual Devices (TVs) linked to Hardware
+    2. Loads commands from config/commands.yaml
+    3. Initializes Hardware and Virtual Devices
+    4. Categorizes them into functional groups (switches, tvs, acs, other)
     5. Fetches initial state in parallel
     """
     # Path setup
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
     yaml_file = os.path.join(project_root, 'config', 'switches.yaml')
-    cmd_file = os.path.join(project_root, 'config', 'commands.yaml') # <--- NEW PATH
+    cmd_file = os.path.join(project_root, 'config', 'commands.yaml')
     
-    SWITCH_DICT = {}
+    # Initialize Categorized Structure
+    devices = {
+        'switches': {},
+        'tvs': {},
+        'acs': {},
+        'other': {},
+        # 'all' is a temporary flat index for dependency lookups (e.g. TVs finding their Blaster)
+        'all': {} 
+    }
     
     # Initialize Cloud Clients
     sonoff_cloud = SonoffCloudClient() 
     tuya_cloud = TuyaCloudClient() 
     sensibo_cloud = SensiboCloudClient()
     
-    print(f"Loading switches from {yaml_file}...")
+    logger.info(f"Loading devices from {yaml_file}...")
     
     try:
         # Load Device Config
@@ -53,11 +64,10 @@ def load_switches():
                 cmd_data = yaml.safe_load(f) or {}
 
         # ---------------------------------------------------------
-        # PASS 1: PHYSICAL HARDWARE (Sonoff, Tuya, Broadlink)
+        # PASS 1: PHYSICAL HARDWARE
         # ---------------------------------------------------------
         for item in device_list:
             name = item.get('name')
-            # Basic validation
             if not name: continue
 
             dev_type = item.get('type', 'sonoff').lower()
@@ -70,50 +80,56 @@ def load_switches():
             mac = item.get('mac')
             stateless = item.get('stateless', False)
             
-            new_switch = None
+            new_device = None
+            category = 'other' # Default fallback
 
             # --- SONOFF ---
             if dev_type == 'sonoff':
-                new_switch = SonoffSwitch(
+                new_device = SonoffSwitch(
                     name=name, ip=ip, device_id=dev_id, 
                     device_key=dev_key, mac=mac, 
                     channel=channel, cloud_client=sonoff_cloud,
                     stateless=stateless
                 )
+                category = 'switches'
 
             # --- TUYA ---
             elif dev_type == 'tuya':
-                new_switch = TuyaSwitch(
+                new_device = TuyaSwitch(
                     name=name, ip=ip, device_id=dev_id,
                     local_key=dev_key, 
                     channel=channel, 
                     cloud_client=tuya_cloud,
                     stateless=stateless
                 )
+                category = 'switches'
             
-            # --- BROADLINK (NEW) ---
+            # --- BROADLINK (Remote/Blaster) ---
             elif dev_type == 'broadlink':
-                new_switch = BroadlinkRemote(
+                new_device = BroadlinkRemote(
                     name=name, ip=ip, device_id=dev_id,
                     mac=mac, 
-                    stateless=True # Always stateless
+                    stateless=True
                 )
+                category = 'other'
 
+            # --- SENSIBO (Smart AC) ---
             elif dev_type == 'sensibo':
-                # Sensibo is unique: it mostly relies on Cloud, so IP might be optional/None
-                new_switch = SensiboAC(
+                new_device = SensiboAC(
                     name=name, 
                     device_id=dev_id, 
-                    cloud_client=sensibo_cloud, # Pass the specific Sensibo client
+                    cloud_client=sensibo_cloud,
                     stateless=stateless
                 )
+                category = 'acs'
 
-            # Add to dictionary if created
-            if new_switch:
-                SWITCH_DICT[name] = new_switch
+            # Register device if created
+            if new_device:
+                devices[category][name] = new_device
+                devices['all'][name] = new_device
 
         # ---------------------------------------------------------
-        # PASS 2: VIRTUAL DEVICES (Televisions)
+        # PASS 2: VIRTUAL DEVICES (Televisions, AC IR)
         # ---------------------------------------------------------
         for item in device_list:
             name = item.get('name')
@@ -124,53 +140,64 @@ def load_switches():
                 # 1. Get commands for this device name
                 my_commands = cmd_data.get(name)
                 if not my_commands:
-                    print(f"Warning: No commands found in commands.yaml for '{name}'")
+                    logger.warning(f"No commands found in commands.yaml for '{name}'")
                     continue
                 
-                # 2. Find the linked IR Blaster
+                # 2. Find the linked IR Blaster in the 'all' registry
                 blaster_name = my_commands.get('IR_device')
-                blaster_obj = SWITCH_DICT.get(blaster_name)
+                blaster_obj = devices['all'].get(blaster_name)
                 
                 if not blaster_obj:
-                    print(f"Error: Blaster '{blaster_name}' not found for {name}")
+                    logger.error(f"Blaster '{blaster_name}' not found for {name}")
                     continue
                 
                 # 3. Clean commands (remove 'IR_device' key)
                 clean_cmds = {k:v for k,v in my_commands.items() if k != 'IR_device'}
 
-                # 4. Create the Object based on type
+                new_virtual = None
+                category = 'other'
+
+                # 4. Create the Object
                 if dev_type == 'television':
-                    new_dev = Television(name, blaster_obj, clean_cmds)
-                    SWITCH_DICT[name] = new_dev
+                    new_virtual = Television(name, blaster_obj, clean_cmds)
+                    category = 'tvs'
                     
                 elif dev_type == 'ac_ir':
-                    # We pass the loaded commands to the new Universal AC class
-                    # We assume 'clean_cmds' contains keys like 'cool_24', 'off'
-                    new_dev = AirConditioner(name, blaster_obj, command_dict=clean_cmds)
-                    SWITCH_DICT[name] = new_dev
+                    new_virtual = AirConditioner(name, blaster_obj, command_dict=clean_cmds)
+                    category = 'acs'
+                
+                if new_virtual:
+                    devices[category][name] = new_virtual
+                    devices['all'][name] = new_virtual
                     
         # ---------------------------------------------------------
         # 3. FETCH INITIAL STATES (PARALLEL)
         # ---------------------------------------------------------
-        print(f"Initializing state for {len(SWITCH_DICT)} devices (Threading)...")
+        logger.info(f"Initializing state for {len(devices['all'])} devices (Threading)...")
         
         def _fetch_state(device):
-            # Safe wrapper just in case
             try:
                 return device.get_state()
             except Exception as e:
-                print(f"Error fetching state for {device.name}: {e}")
+                logger.error(f"Error fetching state for {device.name}: {e}")
                 return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            executor.map(_fetch_state, SWITCH_DICT.values())
+            executor.map(_fetch_state, devices['all'].values())
 
-        print(" -> All devices initialized.")
-        return SWITCH_DICT
+        logger.info("All devices initialized.")
+        
+        # Return only the requested categories
+        return {
+            'switches': devices['switches'],
+            'tvs': devices['tvs'],
+            'acs': devices['acs'],
+            'other': devices['other']
+        }
 
     except FileNotFoundError as e:
-        print(f"Error: Config file not found: {e}")
-        return {}
+        logger.error(f"Config file not found: {e}")
+        return {'switches': {}, 'tvs': {}, 'acs': {}, 'other': {}}
     except yaml.YAMLError as exc:
-        print(f"Error parsing YAML file: {exc}")
-        return {}
+        logger.error(f"Error parsing YAML file: {exc}")
+        return {'switches': {}, 'tvs': {}, 'acs': {}, 'other': {}}

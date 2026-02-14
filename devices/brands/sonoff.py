@@ -9,7 +9,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 
-from .base import SmartDevice
+from ..base import SmartDevice
 
 logger = logging.getLogger("SonoffLAN") # <--- NEW LOGGER
 
