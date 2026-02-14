@@ -244,11 +244,11 @@ def load_devices():
 
         logger.info("All devices initialized.")
         
-        # Return categorized dict (excluding 'all')
-        final_output = devices.copy()
-        del final_output['all']
+        ## Return categorized dict (excluding 'all')
+        #final_output = devices.copy()
+        #del final_output['all']
         
-        return final_output
+        return devices
 
     except FileNotFoundError as e:
         logger.error(f"Config file not found: {e}")
