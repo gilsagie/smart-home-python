@@ -17,18 +17,13 @@ from devices.appliances.light import Light
 from devices.appliances.switch import Switch
 from devices.appliances.other import Other
 
-# Cloud Clients
-from cloud.sonoff_client import SonoffCloudClient
-from cloud.tuya_client import TuyaCloudClient 
-from cloud.sensibo_client import SensiboCloudClient
-
 logger = logging.getLogger("DeviceLoader")
 
-def load_devices():
+def load_devices(sonoff_cloud=None, tuya_cloud=None, sensibo_cloud=None):
     """
     1. Loads devices from config/switches.yaml
     2. Loads commands from config/commands.yaml
-    3. Initializes Hardware and Virtual Devices
+    3. Initializes Hardware using INJECTED Cloud Clients
     4. Wraps devices based on 'category' (Light, Switch, Other)
     5. Fetches initial state in parallel
     """
@@ -48,11 +43,6 @@ def load_devices():
         'other': {},
         'all': {} 
     }
-    
-    # Initialize Cloud Clients
-    sonoff_cloud = SonoffCloudClient() 
-    tuya_cloud = TuyaCloudClient() 
-    sensibo_cloud = SensiboCloudClient()
     
     logger.info(f"Loading devices from {yaml_file}...")
     
@@ -98,7 +88,8 @@ def load_devices():
                 new_device = SonoffSwitch(
                     name=name, ip=ip, device_id=dev_id, 
                     device_key=dev_key, mac=mac, 
-                    channel=channel, cloud_client=sonoff_cloud,
+                    channel=channel, 
+                    cloud_client=sonoff_cloud, # <--- INJECTED
                     stateless=stateless
                 )
                 default_category = 'switches'
@@ -109,7 +100,7 @@ def load_devices():
                     name=name, ip=ip, device_id=dev_id,
                     local_key=dev_key, 
                     channel=channel, 
-                    cloud_client=tuya_cloud,
+                    cloud_client=tuya_cloud, # <--- INJECTED
                     stateless=stateless
                 )
                 default_category = 'switches'
@@ -128,7 +119,7 @@ def load_devices():
                 new_device = SensiboAC(
                     name=name, 
                     device_id=dev_id, 
-                    cloud_client=sensibo_cloud,
+                    cloud_client=sensibo_cloud, # <--- INJECTED
                     stateless=stateless
                 )
                 default_category = 'acs'
@@ -243,10 +234,6 @@ def load_devices():
             executor.map(_fetch_state, devices['all'].values())
 
         logger.info("All devices initialized.")
-        
-        ## Return categorized dict (excluding 'all')
-        #final_output = devices.copy()
-        #del final_output['all']
         
         return devices
 
