@@ -7,49 +7,31 @@ import base64
 import random
 import string
 import urllib3
-import os
-import sys
-import logging  # <--- NEW IMPORT
+import logging
+from utils.config import get_sonoff_creds  # <--- NEW IMPORT
 
 # Disable SSL Warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Create logger for this module
-logger = logging.getLogger("SonoffCloud") # <--- NEW LOGGER
+logger = logging.getLogger("SonoffCloud")
 
 class SonoffCloudClient:
     def __init__(self, app_id=None, app_secret=None, access_token=None, region='as'):
-        self.app_id = app_id
-        self.app_secret = app_secret
-        self.access_token = access_token
-        self.api_url = f'https://{region}-apia.coolkit.cc/v2'
-        self._get_id_data()
+        # Allow overrides, otherwise load from .env
+        creds = get_sonoff_creds()
         
-    def _get_id_data(self):
-        if self.app_id:
-            return
+        self.app_id = app_id or creds['app_id']
+        self.app_secret = app_secret or creds['app_secret']
+        self.access_token = access_token or creds['access_token']
+        # If the user passed a region, use it, otherwise use config
+        self.region = region if region != 'as' else creds['region']
         
-        credentials = {}
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        cred_file = os.path.join(project_root, 'config', 'credentials.txt')
-        
-        try:
-            with open(cred_file, 'r') as f:
-                for line in f:
-                    if '=' in line:
-                        key, value = line.strip().split('=', 1)
-                        credentials[key.strip()] = value.strip()
-        
-        except FileNotFoundError:
-            logger.error(f"credentials.txt not found at {cred_file}") # <--- CHANGED
-            sys.exit()
+        if not self.app_id or not self.access_token:
+            logger.warning("Sonoff credentials missing or incomplete.")
             
-        self.app_id = credentials.get('APP_ID')
-        self.app_secret = credentials.get('APP_SECRET')
-        self.access_token = credentials.get('ACCESS_TOKEN')
-        return
+        self.api_url = f'https://{self.region}-apia.coolkit.cc/v2'
 
+    # ... (Rest of the class methods: _get_signature, _make_request, set_state, get_state remain EXACTLY the same) ...
     def _get_signature(self, data_str):
         digest = hmac.new(
             self.app_secret.encode('utf-8'), 
@@ -79,11 +61,11 @@ class SonoffCloudClient:
                 r = requests.get(url, headers=headers)
             return r.json()
         except Exception as e:
-            logger.error(f"Cloud Connection Error: {e}") # <--- CHANGED
+            logger.error(f"Cloud Connection Error: {e}")
             return {'error': -1}
     
     def set_state(self, device_id, state, channel=None):
-        logger.info(f"Sending {state} to {device_id} (Channel: {channel})...") # <--- CHANGED
+        logger.info(f"Sending {state} to {device_id} (Channel: {channel})...")
         
         if channel is not None:
             params = {
@@ -105,20 +87,20 @@ class SonoffCloudClient:
         resp = self._make_request('POST', '/device/thing/status', payload)
         
         if resp.get('error') == 0:
-            logger.info("Command delivered successfully.") # <--- CHANGED
+            logger.info("Command delivered successfully.")
             return True
         else:
-            logger.error(f"Cloud API Error: {resp}") # <--- CHANGED
+            logger.error(f"Cloud API Error: {resp}")
             return False
         
     def get_state(self, device_id, channel=None):
         endpoint = f'/device/thing?id={device_id}'
-        logger.info(f"Fetching status for {device_id}...") # <--- CHANGED
+        logger.info(f"Fetching status for {device_id}...")
         
         resp = self._make_request('GET', endpoint)
         
         if resp.get('error') != 0:
-            logger.error(f"API Error {resp.get('error')}: {resp.get('msg')}") # <--- CHANGED
+            logger.error(f"API Error {resp.get('error')}: {resp.get('msg')}")
             return None
 
         params = None
@@ -136,7 +118,7 @@ class SonoffCloudClient:
             params = data.get("params", {})
 
         if not params:
-            logger.error(f"Could not find params for {device_id}") # <--- CHANGED
+            logger.error(f"Could not find params for {device_id}")
             return None
 
         if channel is not None:
@@ -148,7 +130,7 @@ class SonoffCloudClient:
             if f"switch_{channel}" in params:
                  return params[f"switch_{channel}"]
 
-            logger.warning(f"Channel {channel} requested but not found in params.") # <--- CHANGED
+            logger.warning(f"Channel {channel} requested but not found in params.")
 
         if "switch" in params:
             return params["switch"]
