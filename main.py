@@ -15,5 +15,5 @@ if __name__ == "__main__":
     
     # These calls work automatically, routing to different IR blasters
     # based on the definitions in commands.yaml
-    switches["Bed_room_TV"].send("volume up")
-    switches["Bed_room_TV"].on() 
+    switches["Bed room AC"].on()
+    switches["Bed room AC"].on() 

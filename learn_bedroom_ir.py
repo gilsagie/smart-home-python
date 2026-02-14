@@ -2,7 +2,7 @@ import broadlink
 import time
 
 # --- CONFIGURATION ---
-IP = "0.0.0.0" # Your Broadlink IP
+IP = "192.168.1.48" # Your Broadlink IP
 # ---------------------
 
 def learn_ir():

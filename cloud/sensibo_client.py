@@ -74,18 +74,34 @@ class SensiboCloudClient:
             return False
 
     def get_state(self, device_id, channel=None):
-        # (Same as before, returns 'on' or 'off')
         if not self.api_key: return None
-        url = f"{self.base_url}/pods/{device_id}/acStates"
-        params = {'apiKey': self.api_key, 'limit': 1, 'fields': 'acState'}
+        
+        # CHANGED: Query the Pod directly for current status, not history
+        url = f"{self.base_url}/pods/{device_id}"
+        
+        # We only ask for the 'acState' field to keep it fast
+        params = {'apiKey': self.api_key, 'fields': 'acState'}
+        
         try:
             resp = requests.get(url, params=params, timeout=5)
-            if resp.status_code == 200:
-                result = resp.json().get('result', [])
-                if result:
-                    return 'on' if result[0].get('acState', {}).get('on') else 'off'
-        except Exception:
-            pass
+            data = resp.json()
+            
+            if resp.status_code == 200 and data.get('status') == 'success':
+                # The 'result' here is the Pod object itself
+                pod = data.get('result', {})
+                ac_state = pod.get('acState', {})
+                
+                # Debugging: Uncomment if you still have issues
+                # logger.info(f"Sensibo Raw State: {ac_state}")
+
+                is_on = ac_state.get('on', False)
+                return 'on' if is_on else 'off'
+            else:
+                logger.error(f"Sensibo API Error: {data}")
+
+        except Exception as e:
+            logger.error(f"Sensibo Connection Failed: {e}")
+            
         return None
     
     def get_measurements(self, device_id):
