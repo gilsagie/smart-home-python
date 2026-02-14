@@ -42,7 +42,8 @@ def convert():
                     'device_id': row.get('device_id', '').strip(),
                     'device_key': row.get('device_key', '').strip(),
                     'mac': row.get('mac', '').strip(),
-                    'stateless': is_stateless  # <--- Add this field
+                    'stateless': is_stateless,
+                    'category': row.get('category', '').strip()
                 }
                 
                 # Only add channel if it exists (keeps YAML clean)

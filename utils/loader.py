@@ -9,9 +9,13 @@ from devices.brands.sonoff import SonoffSwitch
 from devices.brands.tuya import TuyaSwitch
 from devices.brands.broadlink_remote import BroadlinkRemote
 from devices.brands.sensibo import SensiboAC
+
+# Appliance (Wrapper) Imports
 from devices.appliances.television import Television
 from devices.appliances.air_conditioner import AirConditioner
-
+from devices.appliances.light import Light
+from devices.appliances.switch import Switch
+from devices.appliances.other import Other
 
 # Cloud Clients
 from cloud.sonoff_client import SonoffCloudClient
@@ -25,7 +29,7 @@ def load_devices():
     1. Loads devices from config/switches.yaml
     2. Loads commands from config/commands.yaml
     3. Initializes Hardware and Virtual Devices
-    4. Categorizes them into functional groups (switches, tvs, acs, other)
+    4. Wraps devices based on 'category' (Light, Switch, Other)
     5. Fetches initial state in parallel
     """
     # Path setup
@@ -37,10 +41,11 @@ def load_devices():
     # Initialize Categorized Structure
     devices = {
         'switches': {},
+        'lights': {}, 
         'tvs': {},
         'acs': {},
+        'ir': {},     
         'other': {},
-        # 'all' is a temporary flat index for dependency lookups (e.g. TVs finding their Blaster)
         'all': {} 
     }
     
@@ -80,9 +85,14 @@ def load_devices():
             mac = item.get('mac')
             stateless = item.get('stateless', False)
             
+            # Capture User Category
+            user_category = item.get('category')
+            
             new_device = None
-            category = 'other' # Default fallback
+            default_category = 'other' 
 
+            # --- HARDWARE CREATION ---
+            
             # --- SONOFF ---
             if dev_type == 'sonoff':
                 new_device = SonoffSwitch(
@@ -91,7 +101,7 @@ def load_devices():
                     channel=channel, cloud_client=sonoff_cloud,
                     stateless=stateless
                 )
-                category = 'switches'
+                default_category = 'switches'
 
             # --- TUYA ---
             elif dev_type == 'tuya':
@@ -102,7 +112,7 @@ def load_devices():
                     cloud_client=tuya_cloud,
                     stateless=stateless
                 )
-                category = 'switches'
+                default_category = 'switches'
             
             # --- BROADLINK (Remote/Blaster) ---
             elif dev_type == 'broadlink':
@@ -111,7 +121,7 @@ def load_devices():
                     mac=mac, 
                     stateless=True
                 )
-                category = 'other'
+                default_category = 'ir' # Default to IR
 
             # --- SENSIBO (Smart AC) ---
             elif dev_type == 'sensibo':
@@ -121,12 +131,52 @@ def load_devices():
                     cloud_client=sensibo_cloud,
                     stateless=stateless
                 )
-                category = 'acs'
+                default_category = 'acs'
 
-            # Register device if created
+            # --- CATEGORY ROUTING & WRAPPING ---
             if new_device:
-                devices[category][name] = new_device
-                devices['all'][name] = new_device
+                final_device = new_device
+                target_category = default_category
+                
+                # If the user explicitly defined a category, we obey it
+                if user_category:
+                    # NORMALIZATION MAP (Singular -> Plural)
+                    cat_map = {
+                        'light': 'lights',
+                        'switch': 'switches',
+                        'ac': 'acs',
+                        'tv': 'tvs',
+                        'ir': 'ir'
+                    }
+                    
+                    # Get the normalized category (e.g., 'light' -> 'lights')
+                    normalized_cat = cat_map.get(user_category, user_category)
+
+                    # 1. LIGHTS -> Wrap in Light class
+                    if normalized_cat == 'lights':
+                        final_device = Light(name, new_device)
+                        target_category = 'lights'
+                    
+                    # 2. SWITCHES -> Wrap in Switch class
+                    elif normalized_cat == 'switches':
+                        final_device = Switch(name, new_device)
+                        target_category = 'switches'
+                        
+                    # 3. OTHER -> Wrap in Other class
+                    elif normalized_cat == 'other':
+                        final_device = Other(name, new_device)
+                        target_category = 'other'
+                        
+                    # 4. Direct mapping (AC, TV, IR)
+                    else:
+                        target_category = normalized_cat
+                        # Create new bucket if it doesn't exist (e.g. 'heaters')
+                        if target_category not in devices:
+                            devices[target_category] = {}
+
+                # Register the device
+                devices[target_category][name] = final_device
+                devices['all'][name] = final_device
 
         # ---------------------------------------------------------
         # PASS 2: VIRTUAL DEVICES (Televisions, AC IR)
@@ -134,16 +184,17 @@ def load_devices():
         for item in device_list:
             name = item.get('name')
             dev_type = item.get('type', '').lower()
+            user_category = item.get('category')
 
             if dev_type in ['television', 'ac_ir']:  
                 
-                # 1. Get commands for this device name
+                # 1. Get commands
                 my_commands = cmd_data.get(name)
                 if not my_commands:
-                    logger.warning(f"No commands found in commands.yaml for '{name}'")
+                    logger.warning(f"No commands found for '{name}'")
                     continue
                 
-                # 2. Find the linked IR Blaster in the 'all' registry
+                # 2. Find Blaster
                 blaster_name = my_commands.get('IR_device')
                 blaster_obj = devices['all'].get(blaster_name)
                 
@@ -151,13 +202,11 @@ def load_devices():
                     logger.error(f"Blaster '{blaster_name}' not found for {name}")
                     continue
                 
-                # 3. Clean commands (remove 'IR_device' key)
                 clean_cmds = {k:v for k,v in my_commands.items() if k != 'IR_device'}
-
                 new_virtual = None
                 category = 'other'
 
-                # 4. Create the Object
+                # 3. Create Object
                 if dev_type == 'television':
                     new_virtual = Television(name, blaster_obj, clean_cmds)
                     category = 'tvs'
@@ -166,14 +215,22 @@ def load_devices():
                     new_virtual = AirConditioner(name, blaster_obj, command_dict=clean_cmds)
                     category = 'acs'
                 
+                # 4. Apply Category Override with Normalization
+                if user_category:
+                    cat_map = {'light': 'lights', 'switch': 'switches', 'ac': 'acs', 'tv': 'tvs', 'ir': 'ir'}
+                    category = cat_map.get(user_category, user_category)
+                    
+                    if category not in devices:
+                        devices[category] = {}
+
                 if new_virtual:
                     devices[category][name] = new_virtual
                     devices['all'][name] = new_virtual
                     
         # ---------------------------------------------------------
-        # 3. FETCH INITIAL STATES (PARALLEL)
+        # 3. FETCH INITIAL STATES
         # ---------------------------------------------------------
-        logger.info(f"Initializing state for {len(devices['all'])} devices (Threading)...")
+        logger.info(f"Initializing state for {len(devices['all'])} devices...")
         
         def _fetch_state(device):
             try:
@@ -187,17 +244,15 @@ def load_devices():
 
         logger.info("All devices initialized.")
         
-        # Return only the requested categories
-        return {
-            'switches': devices['switches'],
-            'tvs': devices['tvs'],
-            'acs': devices['acs'],
-            'other': devices['other']
-        }
+        # Return categorized dict (excluding 'all')
+        final_output = devices.copy()
+        del final_output['all']
+        
+        return final_output
 
     except FileNotFoundError as e:
         logger.error(f"Config file not found: {e}")
-        return {'switches': {}, 'tvs': {}, 'acs': {}, 'other': {}}
+        return {'switches': {}, 'lights': {}, 'tvs': {}, 'acs': {}, 'other': {}}
     except yaml.YAMLError as exc:
         logger.error(f"Error parsing YAML file: {exc}")
-        return {'switches': {}, 'tvs': {}, 'acs': {}, 'other': {}}
+        return {'switches': {}, 'lights': {}, 'tvs': {}, 'acs': {}, 'other': {}}
